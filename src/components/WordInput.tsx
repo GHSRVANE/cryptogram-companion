@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Check, X, ChevronDown } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface WordInputProps {
@@ -10,6 +10,7 @@ interface WordInputProps {
   suggestions: string[];
   onFocus: () => void;
   disabled?: boolean;
+  language?: 'english' | 'portuguese' | null;
 }
 
 export function WordInput({
@@ -19,7 +20,8 @@ export function WordInput({
   isValid,
   suggestions,
   onFocus,
-  disabled
+  disabled,
+  language
 }: WordInputProps) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -88,7 +90,12 @@ export function WordInput({
               isValid === null && "border-border"
             )}
           />
-          <div className="absolute right-2 top-1/2 -translate-y-1/2">
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            {language && (
+              <span className="text-[10px] px-1 rounded bg-muted text-muted-foreground">
+                {language === 'english' ? 'EN' : 'PT'}
+              </span>
+            )}
             {isValid === true && <Check className="w-4 h-4 text-success" />}
             {isValid === false && value && <X className="w-4 h-4 text-destructive" />}
           </div>
