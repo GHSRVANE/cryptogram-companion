@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useBip39 } from '@/hooks/useBip39';
 import { WordInput } from './WordInput';
+import { ImageAnalyzer } from './ImageAnalyzer';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, Copy, Check, RefreshCw, Lightbulb, Bitcoin } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { findHintsByKeyword } from '@/data/bitcoin-knowledge';
@@ -13,7 +15,15 @@ interface WordSlot {
 }
 
 export function PuzzleSolver() {
-  const { isLoading, error, validateWord, getSuggestions } = useBip39();
+  const { 
+    isLoading, 
+    error, 
+    validateWord, 
+    validateWordAnyLanguage,
+    getSuggestions,
+    activeLanguage,
+    setActiveLanguage 
+  } = useBip39();
   const { toast } = useToast();
   const [wordCount, setWordCount] = useState<12 | 24>(12);
   const [words, setWords] = useState<WordSlot[]>(
@@ -24,9 +34,12 @@ export function PuzzleSolver() {
 
   const handleWordCountChange = (count: 12 | 24) => {
     setWordCount(count);
-    setWords(Array(count).fill(null).map((_, i) => 
-      words[i] || { value: '', isLocked: false }
-    ));
+    setWords(prev => {
+      const newWords = Array(count).fill(null).map((_, i) => 
+        prev[i] || { value: '', isLocked: false }
+      );
+      return newWords;
+    });
   };
 
   const handleWordChange = (index: number, value: string) => {
@@ -36,18 +49,47 @@ export function PuzzleSolver() {
     setWords(newWords);
   };
 
-  const toggleLock = (index: number) => {
+  const handleWordsFromImage = (extractedWords: string[]) => {
     const newWords = [...words];
-    newWords[index] = { ...newWords[index], isLocked: !newWords[index].isLocked };
+    let insertIndex = 0;
+    
+    // Find first empty slot or start from beginning
+    for (let i = 0; i < newWords.length; i++) {
+      if (!newWords[i].value && !newWords[i].isLocked) {
+        insertIndex = i;
+        break;
+      }
+    }
+
+    // Insert extracted words
+    for (const word of extractedWords) {
+      if (insertIndex >= newWords.length) break;
+      
+      // Skip locked slots
+      while (insertIndex < newWords.length && newWords[insertIndex].isLocked) {
+        insertIndex++;
+      }
+      
+      if (insertIndex < newWords.length) {
+        newWords[insertIndex] = { value: word, isLocked: false };
+        insertIndex++;
+      }
+    }
+
     setWords(newWords);
+    toast({
+      title: "Words Applied",
+      description: `${Math.min(extractedWords.length, wordCount)} words added from image`
+    });
   };
 
   const validationResults = useMemo(() => {
     return words.map(w => {
-      if (!w.value) return null;
-      return validateWord(w.value);
+      if (!w.value) return { valid: null, language: null };
+      const result = validateWordAnyLanguage(w.value);
+      return { valid: result.valid, language: result.language };
     });
-  }, [words, validateWord]);
+  }, [words, validateWordAnyLanguage]);
 
   const suggestions = useMemo(() => {
     if (activeIndex === null) return [];
@@ -55,7 +97,7 @@ export function PuzzleSolver() {
     return getSuggestions(word);
   }, [activeIndex, words, getSuggestions]);
 
-  const validCount = validationResults.filter(v => v === true).length;
+  const validCount = validationResults.filter(v => v.valid === true).length;
   const progress = (validCount / wordCount) * 100;
 
   const handleCopy = async () => {
@@ -82,7 +124,7 @@ export function PuzzleSolver() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center space-y-4">
           <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
-          <p className="text-muted-foreground">Loading BIP-39 wordlist...</p>
+          <p className="text-muted-foreground">Loading BIP-39 wordlists (EN/PT)...</p>
         </div>
       </div>
     );
@@ -101,6 +143,9 @@ export function PuzzleSolver() {
 
   return (
     <div className="space-y-6">
+      {/* Image Analyzer */}
+      <ImageAnalyzer onWordsExtracted={handleWordsFromImage} />
+
       {/* Header Controls */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2">
@@ -118,6 +163,15 @@ export function PuzzleSolver() {
           >
             24 Words
           </Button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Tabs value={activeLanguage} onValueChange={(v) => setActiveLanguage(v as 'english' | 'portuguese')}>
+            <TabsList className="h-8">
+              <TabsTrigger value="english" className="text-xs px-2">English</TabsTrigger>
+              <TabsTrigger value="portuguese" className="text-xs px-2">Português</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
 
         <div className="flex items-center gap-2">
@@ -160,7 +214,8 @@ export function PuzzleSolver() {
               index={index}
               value={word.value}
               onChange={(v) => handleWordChange(index, v)}
-              isValid={validationResults[index]}
+              isValid={validationResults[index].valid}
+              language={validationResults[index].language}
               suggestions={activeIndex === index ? suggestions : []}
               onFocus={() => setActiveIndex(index)}
               disabled={word.isLocked}

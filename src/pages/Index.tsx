@@ -1,5 +1,5 @@
 import { PuzzleSolver } from '@/components/PuzzleSolver';
-import { Bitcoin, Shield, Sparkles } from 'lucide-react';
+import { Bitcoin, Shield, Sparkles, Image, Globe } from 'lucide-react';
 
 const Index = () => {
   return (
@@ -28,32 +28,39 @@ const Index = () => {
               Solve Your <span className="text-gradient">Seed Phrase</span> Puzzle
             </h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Enter your partial seed phrase and get real-time validation against the BIP-39 wordlist.
-              Autocomplete suggestions help you find the right words.
+              Upload an image or enter your partial seed phrase. Get real-time validation 
+              against the BIP-39 wordlist in English and Portuguese.
             </p>
           </section>
 
           {/* Features */}
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-card border border-border/50">
+              <Image className="w-5 h-5 text-primary mt-0.5" />
+              <div>
+                <h3 className="font-medium text-sm">OCR Analysis</h3>
+                <p className="text-xs text-muted-foreground">Extract words from images</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-card border border-border/50">
+              <Globe className="w-5 h-5 text-primary mt-0.5" />
+              <div>
+                <h3 className="font-medium text-sm">Bilingual</h3>
+                <p className="text-xs text-muted-foreground">English & Portuguese support</p>
+              </div>
+            </div>
             <div className="flex items-start gap-3 p-4 rounded-xl bg-card border border-border/50">
               <Shield className="w-5 h-5 text-primary mt-0.5" />
               <div>
                 <h3 className="font-medium text-sm">Secure</h3>
-                <p className="text-xs text-muted-foreground">All processing happens locally in your browser</p>
+                <p className="text-xs text-muted-foreground">100% local processing</p>
               </div>
             </div>
             <div className="flex items-start gap-3 p-4 rounded-xl bg-card border border-border/50">
               <Sparkles className="w-5 h-5 text-primary mt-0.5" />
               <div>
-                <h3 className="font-medium text-sm">Smart Suggestions</h3>
-                <p className="text-xs text-muted-foreground">Auto-complete from 2048 BIP-39 words</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 p-4 rounded-xl bg-card border border-border/50">
-              <Bitcoin className="w-5 h-5 text-primary mt-0.5" />
-              <div>
-                <h3 className="font-medium text-sm">Bitcoin Compatible</h3>
-                <p className="text-xs text-muted-foreground">Standard BIP-39 English wordlist</p>
+                <h3 className="font-medium text-sm">Smart Match</h3>
+                <p className="text-xs text-muted-foreground">Auto-suggestions & corrections</p>
               </div>
             </div>
           </section>
