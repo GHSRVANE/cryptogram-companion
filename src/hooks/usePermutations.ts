@@ -120,7 +120,7 @@ export function usePermutations() {
           return;
         }
 
-        const currentPhrase = next.value;
+        const currentPhrase: string[] = next.value as string[];
         tested++;
         batchCount++;
 
@@ -128,7 +128,7 @@ export function usePermutations() {
         const isValid = await validateFn(currentPhrase);
         if (isValid) {
           const result: PermutationResult = {
-            phrase: currentPhrase,
+            phrase: [...currentPhrase],
             index: tested,
             tested,
             total
@@ -150,7 +150,7 @@ export function usePermutations() {
             total,
             percentage: (tested / total) * 100,
             estimatedTimeLeft: formatTime(estimatedTimeLeft),
-            currentPhrase,
+            currentPhrase: [...currentPhrase],
             speed: Math.round(speed)
           });
         }
