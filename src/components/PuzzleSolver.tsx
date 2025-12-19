@@ -2,10 +2,11 @@ import { useState, useMemo } from 'react';
 import { useBip39 } from '@/hooks/useBip39';
 import { WordInput } from './WordInput';
 import { ImageAnalyzer } from './ImageAnalyzer';
+import { PermutationSolver } from './PermutationSolver';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Copy, Check, RefreshCw, Lightbulb, Bitcoin } from 'lucide-react';
+import { Loader2, Copy, Check, RefreshCw, Lightbulb, Bitcoin, Shuffle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { findHintsByKeyword } from '@/data/bitcoin-knowledge';
 
@@ -31,6 +32,7 @@ export function PuzzleSolver() {
   );
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showPermutations, setShowPermutations] = useState(false);
 
   const handleWordCountChange = (count: 12 | 24) => {
     setWordCount(count);
@@ -99,6 +101,17 @@ export function PuzzleSolver() {
 
   const validCount = validationResults.filter(v => v.valid === true).length;
   const progress = (validCount / wordCount) * 100;
+
+  // Get all valid words for permutation testing
+  const validWordsForPermutation = useMemo(() => {
+    return words
+      .map(w => w.value)
+      .filter(v => {
+        if (!v) return false;
+        const result = validateWordAnyLanguage(v);
+        return result.valid;
+      });
+  }, [words, validateWordAnyLanguage]);
 
   const handleCopy = async () => {
     const phrase = words.map(w => w.value).join(' ');
@@ -175,6 +188,14 @@ export function PuzzleSolver() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button 
+            variant={showPermutations ? "default" : "outline"} 
+            size="sm" 
+            onClick={() => setShowPermutations(!showPermutations)}
+          >
+            <Shuffle className="w-4 h-4 mr-2" />
+            Permutations
+          </Button>
           <Button variant="outline" size="sm" onClick={handleReset}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Reset
@@ -223,6 +244,23 @@ export function PuzzleSolver() {
           ))}
         </div>
       </Card>
+
+      {/* Permutation Solver */}
+      {showPermutations && (
+        <PermutationSolver 
+          words={validWordsForPermutation}
+          onPhraseFound={(phrase) => {
+            // Apply found phrase to the puzzle
+            const newWords = [...words];
+            phrase.forEach((word, i) => {
+              if (i < newWords.length) {
+                newWords[i] = { value: word, isLocked: false };
+              }
+            });
+            setWords(newWords);
+          }}
+        />
+      )}
 
       {/* Hints Panel */}
       {currentHints.length > 0 && (
