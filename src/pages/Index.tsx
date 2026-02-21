@@ -2,6 +2,7 @@ import { Bitcoin, Shield, TrendingUp, Star, ExternalLink, ChevronRight } from 'l
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import partnerLogo from '@/assets/btc-wallet-recovery-logo.png';
 
 interface Exchange {
   name: string;
@@ -23,6 +24,14 @@ const exchanges: Exchange[] = [
     referralUrl: "https://coinbase.com/join/3EZXNY2?src=referral-link",
     featured: true,
   },
+  {
+    name: "Bybit",
+    description: "Uma das maiores corretoras do mundo com taxas competitivas, derivativos avançados e bônus generosos para novos usuários.",
+    commission: "Até 30% de comissão recorrente",
+    highlight: "Excelente para traders",
+    rating: 5,
+    referralUrl: "https://www.bybit.com/invite?ref=OJVRLA",
+  },
 ];
 
 const Index = () => {
@@ -31,13 +40,19 @@ const Index = () => {
       {/* Header */}
       <header className="border-b border-border/50 backdrop-blur-sm sticky top-0 z-40 bg-background/80">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bitcoin-gradient">
-              <Bitcoin className="w-6 h-6 text-primary-foreground" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bitcoin-gradient">
+                <Bitcoin className="w-6 h-6 text-primary-foreground" />
+              </div>
+              <div>
+                <h1 className="font-bold text-xl">CryptoStart</h1>
+                <p className="text-xs text-muted-foreground">As melhores corretoras para comprar Bitcoin</p>
+              </div>
             </div>
-            <div>
-              <h1 className="font-bold text-xl">CryptoStart</h1>
-              <p className="text-xs text-muted-foreground">As melhores corretoras para comprar Bitcoin</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground hidden sm:inline">Parceiro</span>
+              <img src={partnerLogo} alt="BTC Wallet Recovery - Parceiro" className="h-8 object-contain" />
             </div>
           </div>
         </div>
