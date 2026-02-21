@@ -1,4 +1,4 @@
-import { Bitcoin, Shield, TrendingUp, Star, ExternalLink, ChevronRight } from 'lucide-react';
+import { Bitcoin, Shield, TrendingUp, Star, ExternalLink, ChevronRight, BookOpen, ArrowRight, Lock, Wallet, Download } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +31,14 @@ const exchanges: Exchange[] = [
     highlight: "Excelente para traders",
     rating: 5,
     referralUrl: "https://www.bybit.com/invite?ref=OJVRLA",
+  },
+  {
+    name: "Binance",
+    description: "A maior corretora de criptomoedas do mundo em volume de negociação. Oferece centenas de pares de trading, taxas baixas e ferramentas avançadas.",
+    commission: "Até 50% de comissão recorrente",
+    highlight: "Maior volume do mundo",
+    rating: 5,
+    referralUrl: "https://www.binance.com/referral/earn-together/refer2earn-usdc/claim?hl=pt-BR&ref=GRO_28502_MNCC2&utm_source=default",
   },
 ];
 
@@ -156,10 +164,68 @@ const Index = () => {
             </div>
           </section>
 
+          {/* Educational Card */}
+          <section className="space-y-4">
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-primary" />
+              <h3 className="text-xl font-semibold">Como comprar e proteger seu Bitcoin</h3>
+            </div>
+            <Card className="border-primary/20 bg-gradient-to-br from-card to-card/80">
+              <CardContent className="p-6 space-y-6">
+                <p className="text-muted-foreground text-sm">
+                  Aprenda o caminho completo: da compra na corretora até a autocustódia segura das suas criptomoedas.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Step 1 */}
+                  <div className="relative p-4 rounded-xl bg-background border border-border/50 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex items-center justify-center w-7 h-7 rounded-full bitcoin-gradient text-primary-foreground text-xs font-bold">1</span>
+                      <h4 className="font-semibold text-sm">Crie sua conta</h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Cadastre-se em uma corretora confiável acima. Faça a verificação de identidade (KYC) e deposite reais via Pix ou transferência bancária.
+                    </p>
+                    <Wallet className="w-8 h-8 text-primary/20 absolute top-4 right-4" />
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="relative p-4 rounded-xl bg-background border border-border/50 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex items-center justify-center w-7 h-7 rounded-full bitcoin-gradient text-primary-foreground text-xs font-bold">2</span>
+                      <h4 className="font-semibold text-sm">Compre Bitcoin</h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Com o saldo disponível, compre Bitcoin (BTC) pelo preço de mercado ou defina um preço limite. Comece com qualquer valor — não precisa comprar 1 BTC inteiro.
+                    </p>
+                    <Bitcoin className="w-8 h-8 text-primary/20 absolute top-4 right-4" />
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="relative p-4 rounded-xl bg-background border border-border/50 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex items-center justify-center w-7 h-7 rounded-full bitcoin-gradient text-primary-foreground text-xs font-bold">3</span>
+                      <h4 className="font-semibold text-sm">Transfira para autocustódia</h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Envie seu BTC para uma carteira pessoal (como Ledger, Trezor ou BlueWallet). Guarde suas 12/24 palavras-semente em local seguro e offline. <strong>Suas chaves, suas moedas!</strong>
+                    </p>
+                    <Lock className="w-8 h-8 text-primary/20 absolute top-4 right-4" />
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
+                  <p className="text-xs text-muted-foreground">
+                    💡 <strong className="text-foreground">Dica importante:</strong> Nunca deixe grandes quantias em corretoras por longos períodos. A autocustódia é a forma mais segura de proteger seus bitcoins. Lembre-se: quem controla as chaves privadas, controla as moedas.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+
           {/* Coming soon */}
           <section className="text-center py-8 space-y-3">
             <p className="text-muted-foreground text-sm">
-              Novas corretoras serão adicionadas em breve — Binance, Bybit, OKX e mais.
+              Novas corretoras serão adicionadas em breve — OKX, Bitget, KuCoin e mais.
             </p>
             <p className="text-xs text-muted-foreground max-w-xl mx-auto">
               ⚠️ Investir em criptomoedas envolve riscos. Pesquise bem antes de investir.
