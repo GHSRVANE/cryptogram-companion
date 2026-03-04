@@ -40,6 +40,14 @@ const exchanges: Exchange[] = [
     rating: 5,
     referralUrl: "https://www.binance.com/referral/earn-together/refer2earn-usdc/claim?hl=pt-BR&ref=GRO_28502_MNCC2&utm_source=default",
   },
+  {
+    name: "Foxbit",
+    description: "Corretora brasileira pioneira no mercado de criptomoedas. Interface simples, suporte em português e depósitos via Pix com liquidez local.",
+    commission: "Bônus por indicação",
+    highlight: "Melhor corretora brasileira",
+    rating: 4,
+    referralUrl: "https://app.foxbit.com.br/register?ref=FT7JGPAN7AWOQB",
+  },
 ];
 
 const Index = () => {
