@@ -1,4 +1,5 @@
-import { Bitcoin, Shield, TrendingUp, Star, ExternalLink, ChevronRight, BookOpen, ArrowRight, Lock, Wallet, Download } from 'lucide-react';
+import { Bitcoin, Shield, TrendingUp, Star, ExternalLink, ChevronRight, BookOpen, ArrowRight, Lock, Wallet, Download, Activity } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -67,6 +68,12 @@ const Index = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                to="/arbitrage"
+                className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition"
+              >
+                <Activity className="h-3.5 w-3.5" /> Arbitragem BNB
+              </Link>
               <span className="text-xs text-muted-foreground hidden sm:inline">Parceiro</span>
               <img src={partnerLogo} alt="BTC Wallet Recovery - Parceiro" className="h-8 object-contain" />
             </div>
