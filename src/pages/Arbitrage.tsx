@@ -303,9 +303,9 @@ const Arbitrage = () => {
 
       <main className="container mx-auto px-4 py-8 space-y-6">
         {/* Disclaimer */}
-        <Card className="border-yellow-500/40 bg-yellow-500/5">
+        <Card className="border-primary/40 bg-primary/5">
           <CardContent className="p-4 flex gap-3">
-            <AlertTriangle className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
             <div className="text-sm space-y-1">
               <p className="font-semibold">Modo seguro — execução manual</p>
               <p className="text-muted-foreground">
