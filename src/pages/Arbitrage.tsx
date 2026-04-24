@@ -452,7 +452,7 @@ const Arbitrage = () => {
                       </div>
                       <div className="text-sm">
                         Lucro estimado:{" "}
-                        <span className={o.estProfitUsd > 0 ? "text-green-500 font-semibold" : "text-destructive"}>
+                        <span className={o.estProfitUsd > 0 ? "text-primary font-semibold" : "text-destructive"}>
                           ${fmt(o.estProfitUsd, 2)}
                         </span>
                       </div>
