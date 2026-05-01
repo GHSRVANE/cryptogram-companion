@@ -855,6 +855,76 @@ const Arbitrage = () => {
           ))}
         </div>
       </main>
+
+      {/* Wallet picker dialog (EIP-6963) */}
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-primary" /> Escolha sua carteira
+            </DialogTitle>
+            <DialogDescription>
+              {providers.length > 0
+                ? `${providers.length} carteira(s) detectada(s) no navegador.`
+                : "Procurando carteiras instaladas..."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            {providers.map((p) => (
+              <button
+                key={p.info.uuid}
+                onClick={() => connectWithProvider(p.provider, p.info)}
+                disabled={connecting}
+                className="w-full flex items-center gap-3 p-3 rounded-md border border-border/50 hover:border-primary/50 hover:bg-muted/40 transition disabled:opacity-50"
+              >
+                {p.info.icon ? (
+                  <img src={p.info.icon} alt={p.info.name} className="h-8 w-8 rounded-md" />
+                ) : (
+                  <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center">
+                    <Wallet className="h-4 w-4" />
+                  </div>
+                )}
+                <div className="flex-1 text-left">
+                  <p className="font-semibold text-sm">{p.info.name}</p>
+                  <p className="text-xs text-muted-foreground">{p.info.rdns}</p>
+                </div>
+                <ExternalLink className="h-4 w-4 text-muted-foreground" />
+              </button>
+            ))}
+
+            {providers.length === 0 && (
+              <div className="text-center py-6 space-y-3">
+                <Search className="h-8 w-8 mx-auto text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma carteira EIP-6963 detectada. Você pode tentar a carteira injetada padrão:
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const fb = eth();
+                    if (fb) {
+                      connectWithProvider(fb, { uuid: "injected", name: "Carteira do navegador", icon: "", rdns: "injected" });
+                    } else {
+                      toast.error("Nenhuma carteira encontrada. Instale MetaMask ou similar.");
+                    }
+                  }}
+                >
+                  Tentar carteira padrão
+                </Button>
+              </div>
+            )}
+
+            <Button variant="ghost" size="sm" className="w-full" onClick={discoverWallets}>
+              <RefreshCw className="h-3.5 w-3.5 mr-2" /> Procurar novamente
+            </Button>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground text-center">
+            Não vê sua carteira? Algumas wallets exigem que você abra o app primeiro ou desbloqueie a extensão.
+          </p>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
