@@ -427,24 +427,47 @@ const Arbitrage = () => {
 
   // ===== Effects =====
   useEffect(() => {
-    const provider = eth();
+    // Discover all injected wallets (EIP-6963)
+    discoverWallets();
+  }, [discoverWallets]);
+
+  useEffect(() => {
+    const provider = activeProvider || eth();
     if (!provider) return;
-    const onAcc = (accs: string[]) => setAccount(accs[0] || null);
+    const onAcc = (accs: string[]) => {
+      if (!accs || accs.length === 0) {
+        setAccount(null);
+        setActiveProvider(null);
+        setActiveWalletInfo(null);
+        toast.info("Carteira desconectada");
+      } else {
+        setAccount(accs[0]);
+      }
+    };
     const onChain = (cid: string) => setChainId(cid);
+    const onDisc = () => {
+      setAccount(null);
+      setActiveProvider(null);
+      setActiveWalletInfo(null);
+    };
     provider.on?.("accountsChanged", onAcc);
     provider.on?.("chainChanged", onChain);
-    // attempt eager connect
-    provider.request({ method: "eth_accounts" }).then((accs: string[]) => {
-      if (accs?.[0]) {
-        setAccount(accs[0]);
-        provider.request({ method: "eth_chainId" }).then((cid: string) => setChainId(cid));
-      }
-    }).catch(() => {});
+    provider.on?.("disconnect", onDisc);
+    // Eager connect only if no explicit provider chosen yet
+    if (!activeProvider && !account) {
+      provider.request({ method: "eth_accounts" }).then((accs: string[]) => {
+        if (accs?.[0]) {
+          setAccount(accs[0]);
+          provider.request({ method: "eth_chainId" }).then((cid: string) => setChainId(cid));
+        }
+      }).catch(() => {});
+    }
     return () => {
       provider.removeListener?.("accountsChanged", onAcc);
       provider.removeListener?.("chainChanged", onChain);
+      provider.removeListener?.("disconnect", onDisc);
     };
-  }, []);
+  }, [activeProvider, account]);
 
   useEffect(() => {
     if (account && onBnb) fetchBalances();
