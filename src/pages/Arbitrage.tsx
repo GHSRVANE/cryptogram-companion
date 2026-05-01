@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Wallet, RefreshCw, AlertTriangle, TrendingUp, Zap, ArrowLeft, ExternalLink, Power, Activity, Brain, PieChart, Target, ShieldAlert } from "lucide-react";
+import { Wallet, RefreshCw, AlertTriangle, TrendingUp, Zap, ArrowLeft, ExternalLink, Power, Activity, Brain, PieChart, Target, ShieldAlert, RefreshCcw, Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 // ===== BNB Chain config =====
@@ -38,6 +39,18 @@ const fmt = (n: number, d = 4) =>
   isFinite(n) ? n.toLocaleString("pt-BR", { maximumFractionDigits: d, minimumFractionDigits: 2 }) : "—";
 
 const eth = () => (typeof window !== "undefined" ? (window as any).ethereum : undefined);
+
+// EIP-6963 wallet discovery
+interface EIP6963ProviderInfo {
+  uuid: string;
+  name: string;
+  icon: string;
+  rdns: string;
+}
+interface EIP6963ProviderDetail {
+  info: EIP6963ProviderInfo;
+  provider: any;
+}
 
 const hexToBigInt = (hex: string) => BigInt(hex);
 const formatUnits = (value: bigint, decimals: number) => {
@@ -89,36 +102,119 @@ const Arbitrage = () => {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [usdPrices, setUsdPrices] = useState<Record<string, number>>({});
   const intervalRef = useRef<number | null>(null);
+  const [providers, setProviders] = useState<EIP6963ProviderDetail[]>([]);
+  const [activeProvider, setActiveProvider] = useState<any>(null);
+  const [activeWalletInfo, setActiveWalletInfo] = useState<EIP6963ProviderInfo | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [connecting, setConnecting] = useState(false);
 
   const onBnb = chainId === BNB_CHAIN_ID_HEX;
 
+  // ===== EIP-6963 wallet discovery =====
+  const discoverWallets = useCallback(() => {
+    if (typeof window === "undefined") return;
+    setProviders([]);
+    const onAnnounce = (event: any) => {
+      const detail = event.detail as EIP6963ProviderDetail;
+      setProviders((prev) => {
+        if (prev.some((p) => p.info.uuid === detail.info.uuid)) return prev;
+        return [...prev, detail];
+      });
+    };
+    window.addEventListener("eip6963:announceProvider", onAnnounce as any);
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+    // Re-request after a tick to catch late announcers
+    setTimeout(() => window.dispatchEvent(new Event("eip6963:requestProvider")), 300);
+    return () => window.removeEventListener("eip6963:announceProvider", onAnnounce as any);
+  }, []);
+
   // ===== Wallet connection =====
-  const connect = useCallback(async () => {
-    const provider = eth();
+  const connectWithProvider = useCallback(async (provider: any, info?: EIP6963ProviderInfo) => {
     if (!provider) {
-      toast.error("Nenhuma carteira detectada. Instale MetaMask, Trust Wallet ou outra carteira EVM.");
+      toast.error("Provedor inválido");
       return;
     }
+    setConnecting(true);
     try {
       const accs: string[] = await provider.request({ method: "eth_requestAccounts" });
       const cid: string = await provider.request({ method: "eth_chainId" });
+      setActiveProvider(provider);
+      setActiveWalletInfo(info || null);
       setAccount(accs[0]);
       setChainId(cid);
-      toast.success("Carteira conectada");
+      setPickerOpen(false);
+      toast.success(`${info?.name || "Carteira"} conectada`);
     } catch (e: any) {
-      toast.error(e?.message || "Falha ao conectar");
+      if (e?.code === 4001) {
+        toast.error("Conexão recusada pelo usuário");
+      } else if (e?.code === -32002) {
+        toast.error("Solicitação pendente — abra sua carteira");
+      } else {
+        toast.error(e?.message || "Falha ao conectar");
+      }
+    } finally {
+      setConnecting(false);
     }
   }, []);
 
-  const disconnect = () => {
+  const openWalletPicker = useCallback(() => {
+    discoverWallets();
+    setPickerOpen(true);
+  }, [discoverWallets]);
+
+  const connect = useCallback(async () => {
+    // Re-run discovery and decide flow
+    discoverWallets();
+    setTimeout(() => {
+      setProviders((current) => {
+        if (current.length === 0) {
+          const fallback = eth();
+          if (fallback) {
+            connectWithProvider(fallback, { uuid: "injected", name: "Carteira do navegador", icon: "", rdns: "injected" });
+          } else {
+            toast.error("Nenhuma carteira detectada. Instale MetaMask, Trust Wallet, Rabby ou outra wallet EVM.");
+          }
+          return current;
+        }
+        if (current.length === 1) {
+          connectWithProvider(current[0].provider, current[0].info);
+        } else {
+          setPickerOpen(true);
+        }
+        return current;
+      });
+    }, 350);
+  }, [discoverWallets, connectWithProvider]);
+
+  const disconnect = useCallback(async () => {
+    const provider = activeProvider || eth();
+    if (provider) {
+      // Try real revoke (MetaMask, Rabby support this)
+      try {
+        await provider.request({
+          method: "wallet_revokePermissions",
+          params: [{ eth_accounts: {} }],
+        });
+        toast.success("Permissões revogadas na carteira");
+      } catch {
+        toast.info("Sessão encerrada localmente. Para revogar totalmente, faça-o nas configurações da sua carteira.");
+      }
+    }
     setAccount(null);
+    setChainId(null);
+    setActiveProvider(null);
+    setActiveWalletInfo(null);
     setBnbBalance("0");
     setTokens([]);
-    toast.info("Carteira desconectada (apenas localmente)");
-  };
+  }, [activeProvider]);
+
+  const switchWallet = useCallback(async () => {
+    await disconnect();
+    setTimeout(() => openWalletPicker(), 200);
+  }, [disconnect, openWalletPicker]);
 
   const switchToBnb = async () => {
-    const provider = eth();
+    const provider = activeProvider || eth();
     if (!provider) return;
     try {
       await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: BNB_CHAIN_ID_HEX }] });
@@ -133,7 +229,7 @@ const Arbitrage = () => {
 
   // ===== Read balances =====
   const fetchBalances = useCallback(async () => {
-    const provider = eth();
+    const provider = activeProvider || eth();
     if (!provider || !account) return;
     setLoading(true);
     try {
@@ -168,7 +264,7 @@ const Arbitrage = () => {
     } finally {
       setLoading(false);
     }
-  }, [account]);
+  }, [account, activeProvider]);
 
   // ===== Price monitoring (CoinGecko tickers, public API) =====
   const fetchPrices = useCallback(async () => {
@@ -331,24 +427,47 @@ const Arbitrage = () => {
 
   // ===== Effects =====
   useEffect(() => {
-    const provider = eth();
+    // Discover all injected wallets (EIP-6963)
+    discoverWallets();
+  }, [discoverWallets]);
+
+  useEffect(() => {
+    const provider = activeProvider || eth();
     if (!provider) return;
-    const onAcc = (accs: string[]) => setAccount(accs[0] || null);
+    const onAcc = (accs: string[]) => {
+      if (!accs || accs.length === 0) {
+        setAccount(null);
+        setActiveProvider(null);
+        setActiveWalletInfo(null);
+        toast.info("Carteira desconectada");
+      } else {
+        setAccount(accs[0]);
+      }
+    };
     const onChain = (cid: string) => setChainId(cid);
+    const onDisc = () => {
+      setAccount(null);
+      setActiveProvider(null);
+      setActiveWalletInfo(null);
+    };
     provider.on?.("accountsChanged", onAcc);
     provider.on?.("chainChanged", onChain);
-    // attempt eager connect
-    provider.request({ method: "eth_accounts" }).then((accs: string[]) => {
-      if (accs?.[0]) {
-        setAccount(accs[0]);
-        provider.request({ method: "eth_chainId" }).then((cid: string) => setChainId(cid));
-      }
-    }).catch(() => {});
+    provider.on?.("disconnect", onDisc);
+    // Eager connect only if no explicit provider chosen yet
+    if (!activeProvider && !account) {
+      provider.request({ method: "eth_accounts" }).then((accs: string[]) => {
+        if (accs?.[0]) {
+          setAccount(accs[0]);
+          provider.request({ method: "eth_chainId" }).then((cid: string) => setChainId(cid));
+        }
+      }).catch(() => {});
+    }
     return () => {
       provider.removeListener?.("accountsChanged", onAcc);
       provider.removeListener?.("chainChanged", onChain);
+      provider.removeListener?.("disconnect", onDisc);
     };
-  }, []);
+  }, [activeProvider, account]);
 
   useEffect(() => {
     if (account && onBnb) fetchBalances();
@@ -380,18 +499,29 @@ const Arbitrage = () => {
           </div>
           <div>
             {account ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap justify-end">
                 <Badge variant={onBnb ? "default" : "destructive"}>
                   {onBnb ? "BNB Chain" : `Rede ${chainId}`}
                 </Badge>
-                <span className="text-xs font-mono">{account.slice(0, 6)}…{account.slice(-4)}</span>
-                <Button size="sm" variant="ghost" onClick={disconnect}>
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/40 border border-border/40">
+                  {activeWalletInfo?.icon && (
+                    <img src={activeWalletInfo.icon} alt={activeWalletInfo.name} className="h-4 w-4 rounded-sm" />
+                  )}
+                  <span className="text-xs font-medium hidden sm:inline">{activeWalletInfo?.name || "Carteira"}</span>
+                  <span className="text-xs font-mono">{account.slice(0, 6)}…{account.slice(-4)}</span>
+                </div>
+                <Button size="sm" variant="outline" onClick={switchWallet} title="Trocar de carteira">
+                  <RefreshCcw className="h-3.5 w-3.5 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Trocar</span>
+                </Button>
+                <Button size="sm" variant="ghost" onClick={disconnect} title="Desconectar">
                   <Power className="h-4 w-4" />
                 </Button>
               </div>
             ) : (
-              <Button size="sm" onClick={connect}>
-                <Wallet className="h-4 w-4 mr-2" /> Conectar Carteira
+              <Button size="sm" onClick={connect} disabled={connecting}>
+                <Wallet className="h-4 w-4 mr-2" />
+                {connecting ? "Conectando..." : "Conectar Carteira"}
               </Button>
             )}
           </div>
@@ -725,6 +855,76 @@ const Arbitrage = () => {
           ))}
         </div>
       </main>
+
+      {/* Wallet picker dialog (EIP-6963) */}
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-primary" /> Escolha sua carteira
+            </DialogTitle>
+            <DialogDescription>
+              {providers.length > 0
+                ? `${providers.length} carteira(s) detectada(s) no navegador.`
+                : "Procurando carteiras instaladas..."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            {providers.map((p) => (
+              <button
+                key={p.info.uuid}
+                onClick={() => connectWithProvider(p.provider, p.info)}
+                disabled={connecting}
+                className="w-full flex items-center gap-3 p-3 rounded-md border border-border/50 hover:border-primary/50 hover:bg-muted/40 transition disabled:opacity-50"
+              >
+                {p.info.icon ? (
+                  <img src={p.info.icon} alt={p.info.name} className="h-8 w-8 rounded-md" />
+                ) : (
+                  <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center">
+                    <Wallet className="h-4 w-4" />
+                  </div>
+                )}
+                <div className="flex-1 text-left">
+                  <p className="font-semibold text-sm">{p.info.name}</p>
+                  <p className="text-xs text-muted-foreground">{p.info.rdns}</p>
+                </div>
+                <ExternalLink className="h-4 w-4 text-muted-foreground" />
+              </button>
+            ))}
+
+            {providers.length === 0 && (
+              <div className="text-center py-6 space-y-3">
+                <Search className="h-8 w-8 mx-auto text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma carteira EIP-6963 detectada. Você pode tentar a carteira injetada padrão:
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const fb = eth();
+                    if (fb) {
+                      connectWithProvider(fb, { uuid: "injected", name: "Carteira do navegador", icon: "", rdns: "injected" });
+                    } else {
+                      toast.error("Nenhuma carteira encontrada. Instale MetaMask ou similar.");
+                    }
+                  }}
+                >
+                  Tentar carteira padrão
+                </Button>
+              </div>
+            )}
+
+            <Button variant="ghost" size="sm" className="w-full" onClick={discoverWallets}>
+              <RefreshCw className="h-3.5 w-3.5 mr-2" /> Procurar novamente
+            </Button>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground text-center">
+            Não vê sua carteira? Algumas wallets exigem que você abra o app primeiro ou desbloqueie a extensão.
+          </p>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
