@@ -499,18 +499,29 @@ const Arbitrage = () => {
           </div>
           <div>
             {account ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap justify-end">
                 <Badge variant={onBnb ? "default" : "destructive"}>
                   {onBnb ? "BNB Chain" : `Rede ${chainId}`}
                 </Badge>
-                <span className="text-xs font-mono">{account.slice(0, 6)}…{account.slice(-4)}</span>
-                <Button size="sm" variant="ghost" onClick={disconnect}>
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/40 border border-border/40">
+                  {activeWalletInfo?.icon && (
+                    <img src={activeWalletInfo.icon} alt={activeWalletInfo.name} className="h-4 w-4 rounded-sm" />
+                  )}
+                  <span className="text-xs font-medium hidden sm:inline">{activeWalletInfo?.name || "Carteira"}</span>
+                  <span className="text-xs font-mono">{account.slice(0, 6)}…{account.slice(-4)}</span>
+                </div>
+                <Button size="sm" variant="outline" onClick={switchWallet} title="Trocar de carteira">
+                  <RefreshCcw className="h-3.5 w-3.5 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Trocar</span>
+                </Button>
+                <Button size="sm" variant="ghost" onClick={disconnect} title="Desconectar">
                   <Power className="h-4 w-4" />
                 </Button>
               </div>
             ) : (
-              <Button size="sm" onClick={connect}>
-                <Wallet className="h-4 w-4 mr-2" /> Conectar Carteira
+              <Button size="sm" onClick={connect} disabled={connecting}>
+                <Wallet className="h-4 w-4 mr-2" />
+                {connecting ? "Conectando..." : "Conectar Carteira"}
               </Button>
             )}
           </div>
