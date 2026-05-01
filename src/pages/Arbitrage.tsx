@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Wallet, RefreshCw, AlertTriangle, TrendingUp, Zap, ArrowLeft, ExternalLink, Power, Activity, Brain, PieChart, Target, ShieldAlert } from "lucide-react";
+import { Wallet, RefreshCw, AlertTriangle, TrendingUp, Zap, ArrowLeft, ExternalLink, Power, Activity, Brain, PieChart, Target, ShieldAlert, RefreshCcw, Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 // ===== BNB Chain config =====
@@ -38,6 +39,18 @@ const fmt = (n: number, d = 4) =>
   isFinite(n) ? n.toLocaleString("pt-BR", { maximumFractionDigits: d, minimumFractionDigits: 2 }) : "—";
 
 const eth = () => (typeof window !== "undefined" ? (window as any).ethereum : undefined);
+
+// EIP-6963 wallet discovery
+interface EIP6963ProviderInfo {
+  uuid: string;
+  name: string;
+  icon: string;
+  rdns: string;
+}
+interface EIP6963ProviderDetail {
+  info: EIP6963ProviderInfo;
+  provider: any;
+}
 
 const hexToBigInt = (hex: string) => BigInt(hex);
 const formatUnits = (value: bigint, decimals: number) => {
@@ -89,36 +102,119 @@ const Arbitrage = () => {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [usdPrices, setUsdPrices] = useState<Record<string, number>>({});
   const intervalRef = useRef<number | null>(null);
+  const [providers, setProviders] = useState<EIP6963ProviderDetail[]>([]);
+  const [activeProvider, setActiveProvider] = useState<any>(null);
+  const [activeWalletInfo, setActiveWalletInfo] = useState<EIP6963ProviderInfo | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [connecting, setConnecting] = useState(false);
 
   const onBnb = chainId === BNB_CHAIN_ID_HEX;
 
+  // ===== EIP-6963 wallet discovery =====
+  const discoverWallets = useCallback(() => {
+    if (typeof window === "undefined") return;
+    setProviders([]);
+    const onAnnounce = (event: any) => {
+      const detail = event.detail as EIP6963ProviderDetail;
+      setProviders((prev) => {
+        if (prev.some((p) => p.info.uuid === detail.info.uuid)) return prev;
+        return [...prev, detail];
+      });
+    };
+    window.addEventListener("eip6963:announceProvider", onAnnounce as any);
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+    // Re-request after a tick to catch late announcers
+    setTimeout(() => window.dispatchEvent(new Event("eip6963:requestProvider")), 300);
+    return () => window.removeEventListener("eip6963:announceProvider", onAnnounce as any);
+  }, []);
+
   // ===== Wallet connection =====
-  const connect = useCallback(async () => {
-    const provider = eth();
+  const connectWithProvider = useCallback(async (provider: any, info?: EIP6963ProviderInfo) => {
     if (!provider) {
-      toast.error("Nenhuma carteira detectada. Instale MetaMask, Trust Wallet ou outra carteira EVM.");
+      toast.error("Provedor inválido");
       return;
     }
+    setConnecting(true);
     try {
       const accs: string[] = await provider.request({ method: "eth_requestAccounts" });
       const cid: string = await provider.request({ method: "eth_chainId" });
+      setActiveProvider(provider);
+      setActiveWalletInfo(info || null);
       setAccount(accs[0]);
       setChainId(cid);
-      toast.success("Carteira conectada");
+      setPickerOpen(false);
+      toast.success(`${info?.name || "Carteira"} conectada`);
     } catch (e: any) {
-      toast.error(e?.message || "Falha ao conectar");
+      if (e?.code === 4001) {
+        toast.error("Conexão recusada pelo usuário");
+      } else if (e?.code === -32002) {
+        toast.error("Solicitação pendente — abra sua carteira");
+      } else {
+        toast.error(e?.message || "Falha ao conectar");
+      }
+    } finally {
+      setConnecting(false);
     }
   }, []);
 
-  const disconnect = () => {
+  const openWalletPicker = useCallback(() => {
+    discoverWallets();
+    setPickerOpen(true);
+  }, [discoverWallets]);
+
+  const connect = useCallback(async () => {
+    // Re-run discovery and decide flow
+    discoverWallets();
+    setTimeout(() => {
+      setProviders((current) => {
+        if (current.length === 0) {
+          const fallback = eth();
+          if (fallback) {
+            connectWithProvider(fallback, { uuid: "injected", name: "Carteira do navegador", icon: "", rdns: "injected" });
+          } else {
+            toast.error("Nenhuma carteira detectada. Instale MetaMask, Trust Wallet, Rabby ou outra wallet EVM.");
+          }
+          return current;
+        }
+        if (current.length === 1) {
+          connectWithProvider(current[0].provider, current[0].info);
+        } else {
+          setPickerOpen(true);
+        }
+        return current;
+      });
+    }, 350);
+  }, [discoverWallets, connectWithProvider]);
+
+  const disconnect = useCallback(async () => {
+    const provider = activeProvider || eth();
+    if (provider) {
+      // Try real revoke (MetaMask, Rabby support this)
+      try {
+        await provider.request({
+          method: "wallet_revokePermissions",
+          params: [{ eth_accounts: {} }],
+        });
+        toast.success("Permissões revogadas na carteira");
+      } catch {
+        toast.info("Sessão encerrada localmente. Para revogar totalmente, faça-o nas configurações da sua carteira.");
+      }
+    }
     setAccount(null);
+    setChainId(null);
+    setActiveProvider(null);
+    setActiveWalletInfo(null);
     setBnbBalance("0");
     setTokens([]);
-    toast.info("Carteira desconectada (apenas localmente)");
-  };
+  }, [activeProvider]);
+
+  const switchWallet = useCallback(async () => {
+    await disconnect();
+    setTimeout(() => openWalletPicker(), 200);
+  }, [disconnect, openWalletPicker]);
 
   const switchToBnb = async () => {
-    const provider = eth();
+    const provider = activeProvider || eth();
     if (!provider) return;
     try {
       await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: BNB_CHAIN_ID_HEX }] });
@@ -133,7 +229,7 @@ const Arbitrage = () => {
 
   // ===== Read balances =====
   const fetchBalances = useCallback(async () => {
-    const provider = eth();
+    const provider = activeProvider || eth();
     if (!provider || !account) return;
     setLoading(true);
     try {
@@ -168,7 +264,7 @@ const Arbitrage = () => {
     } finally {
       setLoading(false);
     }
-  }, [account]);
+  }, [account, activeProvider]);
 
   // ===== Price monitoring (CoinGecko tickers, public API) =====
   const fetchPrices = useCallback(async () => {
