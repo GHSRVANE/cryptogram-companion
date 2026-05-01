@@ -173,6 +173,22 @@ const Arbitrage = () => {
   // ===== Price monitoring (CoinGecko tickers, public API) =====
   const fetchPrices = useCallback(async () => {
     try {
+      // Fetch USD prices for all tracked tokens + BNB in parallel
+      const ids = ["binancecoin", ...TOKENS.map((t) => t.cgId)].join(",");
+      try {
+        const pr = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`);
+        if (pr.ok) {
+          const pj = await pr.json();
+          const map: Record<string, number> = {
+            BNB: pj["binancecoin"]?.usd ?? 0,
+          };
+          TOKENS.forEach((t) => {
+            map[t.symbol] = pj[t.cgId]?.usd ?? (t.isStable ? 1 : 0);
+          });
+          setUsdPrices(map);
+        }
+      } catch {}
+
       const next: Record<string, DexPrice[]> = {};
       const opps: Opportunity[] = [];
       for (const p of PAIRS) {
@@ -229,6 +245,80 @@ const Arbitrage = () => {
   const allocBnb = (totalBnb * allocPct) / 100;
   const reserveGas = 0.005; // BNB reservado para gas
   const usableBnb = Math.max(0, allocBnb - reserveGas);
+
+  // ===== Smart balance analysis =====
+  const assets: AssetWithPrice[] = [
+    {
+      symbol: "BNB",
+      balance: bnbBalance,
+      raw: 0n,
+      priceUsd: usdPrices["BNB"] ?? 0,
+      valueUsd: (parseFloat(bnbBalance) || 0) * (usdPrices["BNB"] ?? 0),
+      isStable: false,
+    },
+    ...tokens.map((t) => {
+      const meta = TOKENS.find((x) => x.symbol === t.symbol);
+      const price = usdPrices[t.symbol] ?? (meta?.isStable ? 1 : 0);
+      return {
+        ...t,
+        priceUsd: price,
+        valueUsd: (parseFloat(t.balance) || 0) * price,
+        isStable: meta?.isStable ?? false,
+      };
+    }),
+  ].filter((a) => parseFloat(a.balance) > 0);
+
+  const totalUsd = assets.reduce((s, a) => s + a.valueUsd, 0);
+  const stableUsd = assets.filter((a) => a.isStable).reduce((s, a) => s + a.valueUsd, 0);
+  const volatileUsd = totalUsd - stableUsd;
+  const stablePct = totalUsd > 0 ? (stableUsd / totalUsd) * 100 : 0;
+  const largestAsset = [...assets].sort((a, b) => b.valueUsd - a.valueUsd)[0];
+
+  // Risk profile based on portfolio composition + total size
+  let riskProfile: { label: string; tone: "low" | "med" | "high"; advice: string } = {
+    label: "Indefinido",
+    tone: "med",
+    advice: "Conecte sua carteira para análise.",
+  };
+  if (totalUsd > 0) {
+    if (totalUsd < 50) {
+      riskProfile = {
+        label: "Capital muito baixo",
+        tone: "high",
+        advice: "Com menos de $50, taxas de gas e DEX (≈$0,30–$1 por swap) consomem o lucro. Recomendado acumular antes de operar.",
+      };
+    } else if (stablePct > 70) {
+      riskProfile = {
+        label: "Conservador (alto % stable)",
+        tone: "low",
+        advice: "Boa base para arbitragem stable→volátil→stable. Use spreads ≥ 0,8% e alocação de 10–20%.",
+      };
+    } else if (stablePct < 20) {
+      riskProfile = {
+        label: "Agressivo (quase tudo volátil)",
+        tone: "high",
+        advice: "Exposição alta a volatilidade. Considere converter parte para stable antes de arbitragem ou usar alocação ≤ 10%.",
+      };
+    } else {
+      riskProfile = {
+        label: "Equilibrado",
+        tone: "med",
+        advice: "Boa diversificação. Foque em pares com seu maior saldo para minimizar swaps extras.",
+      };
+    }
+  }
+
+  // Recommended pair: prefer the one matching user's largest holding
+  const recommendedOpp = (() => {
+    if (!largestAsset || opportunities.length === 0) return null;
+    const matching = opportunities.find((o) => o.pair.startsWith(largestAsset.symbol + "/"));
+    return matching || opportunities[0];
+  })();
+
+  // Recommended allocation (USD) based on risk
+  const recommendedAllocPct = riskProfile.tone === "low" ? 20 : riskProfile.tone === "med" ? 12 : 6;
+  const recommendedCapitalUsd = (totalUsd * recommendedAllocPct) / 100;
+  const minProfitableSpread = totalUsd > 0 ? Math.max(0.3, (1.5 / Math.max(recommendedCapitalUsd, 1)) * 100 + 0.5) : 1;
 
   // Profit estimate per opportunity using usableBnb * buyPrice as capital proxy
   const enrichedOpps = opportunities.map((o) => {
