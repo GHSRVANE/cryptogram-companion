@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Wallet, RefreshCw, AlertTriangle, TrendingUp, Zap, ArrowLeft, ExternalLink, Power, Activity } from "lucide-react";
+import { Wallet, RefreshCw, AlertTriangle, TrendingUp, Zap, ArrowLeft, ExternalLink, Power, Activity, Brain, PieChart, Target, ShieldAlert } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,11 +20,11 @@ const BNB_PARAMS = {
 
 // Tokens BEP-20 mais usados em arbitragem
 const TOKENS = [
-  { symbol: "WBNB", address: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", decimals: 18 },
-  { symbol: "BUSD", address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", decimals: 18 },
-  { symbol: "USDT", address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 },
-  { symbol: "USDC", address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 },
-  { symbol: "CAKE", address: "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", decimals: 18 },
+  { symbol: "WBNB", address: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", decimals: 18, cgId: "wbnb", isStable: false },
+  { symbol: "BUSD", address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", decimals: 18, cgId: "binance-usd", isStable: true },
+  { symbol: "USDT", address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18, cgId: "tether", isStable: true },
+  { symbol: "USDC", address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18, cgId: "usd-coin", isStable: true },
+  { symbol: "CAKE", address: "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", decimals: 18, cgId: "pancakeswap-token", isStable: false },
 ];
 
 // Pares monitorados e DEXs (CoinGecko Tickers API – sem API key)
@@ -51,6 +51,12 @@ interface TokenBalance {
   symbol: string;
   balance: string;
   raw: bigint;
+}
+
+interface AssetWithPrice extends TokenBalance {
+  priceUsd: number;
+  valueUsd: number;
+  isStable: boolean;
 }
 
 interface DexPrice {
@@ -81,6 +87,7 @@ const Arbitrage = () => {
   const [minSpread, setMinSpread] = useState(0.3);
   const [allocPct, setAllocPct] = useState(20);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [usdPrices, setUsdPrices] = useState<Record<string, number>>({});
   const intervalRef = useRef<number | null>(null);
 
   const onBnb = chainId === BNB_CHAIN_ID_HEX;
