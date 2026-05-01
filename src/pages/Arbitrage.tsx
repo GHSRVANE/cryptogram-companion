@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Wallet, RefreshCw, AlertTriangle, TrendingUp, Zap, ArrowLeft, ExternalLink, Power, Activity } from "lucide-react";
+import { Wallet, RefreshCw, AlertTriangle, TrendingUp, Zap, ArrowLeft, ExternalLink, Power, Activity, Brain, PieChart, Target, ShieldAlert } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,11 +20,11 @@ const BNB_PARAMS = {
 
 // Tokens BEP-20 mais usados em arbitragem
 const TOKENS = [
-  { symbol: "WBNB", address: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", decimals: 18 },
-  { symbol: "BUSD", address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", decimals: 18 },
-  { symbol: "USDT", address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 },
-  { symbol: "USDC", address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 },
-  { symbol: "CAKE", address: "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", decimals: 18 },
+  { symbol: "WBNB", address: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", decimals: 18, cgId: "wbnb", isStable: false },
+  { symbol: "BUSD", address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", decimals: 18, cgId: "binance-usd", isStable: true },
+  { symbol: "USDT", address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18, cgId: "tether", isStable: true },
+  { symbol: "USDC", address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18, cgId: "usd-coin", isStable: true },
+  { symbol: "CAKE", address: "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", decimals: 18, cgId: "pancakeswap-token", isStable: false },
 ];
 
 // Pares monitorados e DEXs (CoinGecko Tickers API – sem API key)
@@ -51,6 +51,12 @@ interface TokenBalance {
   symbol: string;
   balance: string;
   raw: bigint;
+}
+
+interface AssetWithPrice extends TokenBalance {
+  priceUsd: number;
+  valueUsd: number;
+  isStable: boolean;
 }
 
 interface DexPrice {
@@ -81,6 +87,7 @@ const Arbitrage = () => {
   const [minSpread, setMinSpread] = useState(0.3);
   const [allocPct, setAllocPct] = useState(20);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [usdPrices, setUsdPrices] = useState<Record<string, number>>({});
   const intervalRef = useRef<number | null>(null);
 
   const onBnb = chainId === BNB_CHAIN_ID_HEX;
@@ -166,6 +173,22 @@ const Arbitrage = () => {
   // ===== Price monitoring (CoinGecko tickers, public API) =====
   const fetchPrices = useCallback(async () => {
     try {
+      // Fetch USD prices for all tracked tokens + BNB in parallel
+      const ids = ["binancecoin", ...TOKENS.map((t) => t.cgId)].join(",");
+      try {
+        const pr = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`);
+        if (pr.ok) {
+          const pj = await pr.json();
+          const map: Record<string, number> = {
+            BNB: pj["binancecoin"]?.usd ?? 0,
+          };
+          TOKENS.forEach((t) => {
+            map[t.symbol] = pj[t.cgId]?.usd ?? (t.isStable ? 1 : 0);
+          });
+          setUsdPrices(map);
+        }
+      } catch {}
+
       const next: Record<string, DexPrice[]> = {};
       const opps: Opportunity[] = [];
       for (const p of PAIRS) {
@@ -222,6 +245,80 @@ const Arbitrage = () => {
   const allocBnb = (totalBnb * allocPct) / 100;
   const reserveGas = 0.005; // BNB reservado para gas
   const usableBnb = Math.max(0, allocBnb - reserveGas);
+
+  // ===== Smart balance analysis =====
+  const assets: AssetWithPrice[] = [
+    {
+      symbol: "BNB",
+      balance: bnbBalance,
+      raw: 0n,
+      priceUsd: usdPrices["BNB"] ?? 0,
+      valueUsd: (parseFloat(bnbBalance) || 0) * (usdPrices["BNB"] ?? 0),
+      isStable: false,
+    },
+    ...tokens.map((t) => {
+      const meta = TOKENS.find((x) => x.symbol === t.symbol);
+      const price = usdPrices[t.symbol] ?? (meta?.isStable ? 1 : 0);
+      return {
+        ...t,
+        priceUsd: price,
+        valueUsd: (parseFloat(t.balance) || 0) * price,
+        isStable: meta?.isStable ?? false,
+      };
+    }),
+  ].filter((a) => parseFloat(a.balance) > 0);
+
+  const totalUsd = assets.reduce((s, a) => s + a.valueUsd, 0);
+  const stableUsd = assets.filter((a) => a.isStable).reduce((s, a) => s + a.valueUsd, 0);
+  const volatileUsd = totalUsd - stableUsd;
+  const stablePct = totalUsd > 0 ? (stableUsd / totalUsd) * 100 : 0;
+  const largestAsset = [...assets].sort((a, b) => b.valueUsd - a.valueUsd)[0];
+
+  // Risk profile based on portfolio composition + total size
+  let riskProfile: { label: string; tone: "low" | "med" | "high"; advice: string } = {
+    label: "Indefinido",
+    tone: "med",
+    advice: "Conecte sua carteira para análise.",
+  };
+  if (totalUsd > 0) {
+    if (totalUsd < 50) {
+      riskProfile = {
+        label: "Capital muito baixo",
+        tone: "high",
+        advice: "Com menos de $50, taxas de gas e DEX (≈$0,30–$1 por swap) consomem o lucro. Recomendado acumular antes de operar.",
+      };
+    } else if (stablePct > 70) {
+      riskProfile = {
+        label: "Conservador (alto % stable)",
+        tone: "low",
+        advice: "Boa base para arbitragem stable→volátil→stable. Use spreads ≥ 0,8% e alocação de 10–20%.",
+      };
+    } else if (stablePct < 20) {
+      riskProfile = {
+        label: "Agressivo (quase tudo volátil)",
+        tone: "high",
+        advice: "Exposição alta a volatilidade. Considere converter parte para stable antes de arbitragem ou usar alocação ≤ 10%.",
+      };
+    } else {
+      riskProfile = {
+        label: "Equilibrado",
+        tone: "med",
+        advice: "Boa diversificação. Foque em pares com seu maior saldo para minimizar swaps extras.",
+      };
+    }
+  }
+
+  // Recommended pair: prefer the one matching user's largest holding
+  const recommendedOpp = (() => {
+    if (!largestAsset || opportunities.length === 0) return null;
+    const matching = opportunities.find((o) => o.pair.startsWith(largestAsset.symbol + "/"));
+    return matching || opportunities[0];
+  })();
+
+  // Recommended allocation (USD) based on risk
+  const recommendedAllocPct = riskProfile.tone === "low" ? 20 : riskProfile.tone === "med" ? 12 : 6;
+  const recommendedCapitalUsd = (totalUsd * recommendedAllocPct) / 100;
+  const minProfitableSpread = totalUsd > 0 ? Math.max(0.3, (1.5 / Math.max(recommendedCapitalUsd, 1)) * 100 + 0.5) : 1;
 
   // Profit estimate per opportunity using usableBnb * buyPrice as capital proxy
   const enrichedOpps = opportunities.map((o) => {
@@ -359,14 +456,24 @@ const Arbitrage = () => {
               <CardContent className="space-y-2">
                 <div className="flex justify-between p-3 rounded-md bg-muted/40">
                   <span className="font-semibold">BNB</span>
-                  <span className="font-mono">{fmt(parseFloat(bnbBalance), 6)}</span>
+                  <div className="text-right">
+                    <div className="font-mono">{fmt(parseFloat(bnbBalance), 6)}</div>
+                    <div className="text-xs text-muted-foreground">${fmt((parseFloat(bnbBalance) || 0) * (usdPrices["BNB"] || 0), 2)}</div>
+                  </div>
                 </div>
                 {tokens.map((t) => (
                   <div key={t.symbol} className="flex justify-between p-3 rounded-md bg-muted/20 text-sm">
                     <span>{t.symbol}</span>
-                    <span className="font-mono">{fmt(parseFloat(t.balance), 4)}</span>
+                    <div className="text-right">
+                      <div className="font-mono">{fmt(parseFloat(t.balance), 4)}</div>
+                      <div className="text-xs text-muted-foreground">${fmt((parseFloat(t.balance) || 0) * (usdPrices[t.symbol] || 0), 2)}</div>
+                    </div>
                   </div>
                 ))}
+                <div className="flex justify-between p-3 mt-2 rounded-md border border-primary/40 bg-primary/5">
+                  <span className="font-semibold text-sm">Total carteira</span>
+                  <span className="font-mono font-semibold">${fmt(totalUsd, 2)}</span>
+                </div>
               </CardContent>
             </Card>
 
@@ -417,6 +524,113 @@ const Arbitrage = () => {
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* ===== Smart Balance Analysis ===== */}
+        {account && onBnb && totalUsd > 0 && (
+          <Card className="border-primary/30">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Brain className="h-4 w-4 text-primary" /> Análise inteligente do saldo
+              </CardTitle>
+              <CardDescription>
+                O bot examina a composição da sua carteira e recomenda parâmetros adequados ao seu perfil.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {/* Distribuição */}
+              <div>
+                <div className="flex items-center justify-between text-sm mb-2">
+                  <span className="flex items-center gap-2 font-semibold">
+                    <PieChart className="h-4 w-4 text-primary" /> Distribuição
+                  </span>
+                  <span className="text-muted-foreground">
+                    Stable {stablePct.toFixed(0)}% · Volátil {(100 - stablePct).toFixed(0)}%
+                  </span>
+                </div>
+                <div className="flex h-3 rounded-full overflow-hidden bg-muted">
+                  <div className="bg-primary" style={{ width: `${stablePct}%` }} />
+                  <div className="bg-orange-500" style={{ width: `${100 - stablePct}%` }} />
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
+                  <div className="rounded-md bg-muted/30 p-2">
+                    <p className="text-muted-foreground">Stablecoins</p>
+                    <p className="font-mono font-semibold">${fmt(stableUsd, 2)}</p>
+                  </div>
+                  <div className="rounded-md bg-muted/30 p-2">
+                    <p className="text-muted-foreground">Voláteis (BNB, CAKE...)</p>
+                    <p className="font-mono font-semibold">${fmt(volatileUsd, 2)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Perfil de risco */}
+              <div className="rounded-md p-3 border border-border/50 bg-muted/20">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="flex items-center gap-2 font-semibold text-sm">
+                    <ShieldAlert className="h-4 w-4 text-primary" /> Perfil detectado
+                  </span>
+                  <Badge
+                    variant={riskProfile.tone === "low" ? "default" : riskProfile.tone === "high" ? "destructive" : "secondary"}
+                  >
+                    {riskProfile.label}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">{riskProfile.advice}</p>
+              </div>
+
+              {/* Recomendação */}
+              <div className="rounded-md p-3 border border-primary/30 bg-primary/5 space-y-2">
+                <div className="flex items-center gap-2 font-semibold text-sm">
+                  <Target className="h-4 w-4 text-primary" /> Recomendação personalizada
+                </div>
+                <div className="grid sm:grid-cols-3 gap-2 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Alocação sugerida</p>
+                    <p className="font-mono font-semibold">{recommendedAllocPct}% (${fmt(recommendedCapitalUsd, 2)})</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Spread mínimo viável</p>
+                    <p className="font-mono font-semibold">{minProfitableSpread.toFixed(2)}%</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Maior posição</p>
+                    <p className="font-mono font-semibold">{largestAsset?.symbol} (${fmt(largestAsset?.valueUsd || 0, 2)})</p>
+                  </div>
+                </div>
+                {recommendedOpp ? (
+                  <div className="text-sm pt-2 border-t border-border/40">
+                    <p className="text-muted-foreground text-xs mb-1">Melhor par para o seu saldo agora:</p>
+                    <p>
+                      <strong>{recommendedOpp.pair}</strong> — comprar em <strong>{recommendedOpp.buyOn}</strong>{" "}
+                      (${fmt(recommendedOpp.buyPrice, 4)}) e vender em <strong>{recommendedOpp.sellOn}</strong>{" "}
+                      (${fmt(recommendedOpp.sellPrice, 4)}) · spread {recommendedOpp.spreadPct.toFixed(2)}%
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground pt-2 border-t border-border/40">
+                    Aguardando dados de mercado para recomendar par...
+                  </p>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full mt-2"
+                  onClick={() => {
+                    setAllocPct(recommendedAllocPct);
+                    setMinSpread(Number(minProfitableSpread.toFixed(2)));
+                    toast.success("Parâmetros aplicados à estratégia");
+                  }}
+                >
+                  Aplicar parâmetros recomendados
+                </Button>
+              </div>
+
+              <p className="text-[11px] text-muted-foreground italic">
+                Análise informativa — não é recomendação financeira. Cada trade ainda exige sua confirmação na carteira.
+              </p>
+            </CardContent>
+          </Card>
         )}
 
         {/* Oportunidades */}
